@@ -7,11 +7,19 @@ config.CLOCK_WAIT_MAPPING = {
     ["10:00"] = {min = 3.5, max = 7},
 }
 
-config.ICON_IMAGE = "http://www.roblox.com/asset/?id=95384848753847"
+config.ICON_IMAGE = "rbxassetid://95384848753847"  -- pakai rbxassetid
 
 config.COLORS = {
-    on = {background = Color3.fromRGB(255, 170, 0), text = Color3.fromRGB(22, 16, 12)},
-    off = {background = Color3.fromRGB(22, 16, 12), text = Color3.fromRGB(255, 170, 0)}
+    on = {
+        background = Color3.fromRGB(255, 170, 0),
+        text = Color3.fromRGB(22, 16, 12),
+        icon = Color3.fromRGB(22, 16, 12),
+    },
+    off = {
+        background = Color3.fromRGB(22, 16, 12),
+        text = Color3.fromRGB(255, 170, 0),
+        icon = Color3.fromRGB(255, 170, 0)
+    }
 }
 
 return config
