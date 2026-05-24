@@ -4,15 +4,16 @@ local state = {
     gameConnected = false,
     thread = nil,
 
-    -- EXTREME SETTINGS
-    baseDepth = 9,
-    maxDepth = 16,
-    searchTimeMultiplier = 1250,     -- sangat tinggi
-    useMultiPV = true,
-    multiPVCount = 3,                -- analisis beberapa variasi terbaik
+    -- === NUCLEAR SETTINGS ===
+    baseDepth = 11,                    -- mulai sangat tinggi
+    maxDepth = 20,                     -- ekstrem
+    searchTimeMultiplier = 1850,       -- sangat berat
+    multiPVCount = 5,                  -- analisis 5 variasi terbaik
+    useTransposition = true,
+    transpositionTable = {},
     moveHistory = {},
-    transpositionTable = {},         -- simulasi sederhana
     lastEval = 0,
+    contemptFactor = 35,               -- mengurangi drawish behavior
 }
 
 return state
