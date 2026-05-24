@@ -1,121 +1,96 @@
 local M = {}
 
 function M.init(modules)
-    local config = modules.config
     local state = modules.state
-    local ai = modules.ai
-
-    local aiRunning = false
-
-    -- Wait for GUI to be present
-    local player = game:GetService("Players").LocalPlayer
+    local player = game.Players.LocalPlayer
     local playerGui = player:WaitForChild("PlayerGui")
 
-    -- Wait for the existing structure
-    local mainMenu = playerGui:WaitForChild("MainMenu", 5)
-    local sideFrame = mainMenu and mainMenu:WaitForChild("SideFrame", 5)
-
-    if not sideFrame then
-        warn("SideFrame not found. Aborting UI injection.")
-        return
-    end
-    sideFrame.AnchorPoint = Vector2.new(0, 0.45)
-
-    if sideFrame:FindFirstChild("aiFrame") then
-        warn("Chess AI toggle UI already injected.")
-        return
+    -- Hapus GUI lama jika ada
+    if playerGui:FindFirstChild("ChessAINuclearGUI") then
+        playerGui.ChessAINuclearGUI:Destroy()
     end
 
-    -- Main frame
-    local aiFrame = Instance.new("Frame")
-    aiFrame.Name = "aiFrame"
-    aiFrame.Size = UDim2.new(1, 0, 0.045, 0) -- Scaled size
-    aiFrame.BackgroundColor3 = config.COLORS.off.background
-    aiFrame.LayoutOrder = 99
-    aiFrame.Parent = sideFrame
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "ChessAINuclearGUI"
+    screenGui.ResetOnSpawn = false
+    screenGui.Parent = playerGui
 
-    -- Corners + stroke for the frame
-    local corner = Instance.new("UICorner", aiFrame)
-    corner.CornerRadius = UDim.new(0, 8)
+    local frame = Instance.new("Frame")
+    frame.Name = "MainFrame"
+    frame.Size = UDim2.new(0, 170, 0, 85)
+    frame.Position = UDim2.new(0, 15, 0, 15)
+    frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    frame.BorderSizePixel = 0
+    frame.Active = true
+    frame.Draggable = true
+    frame.Parent = screenGui
 
-    local stroke = Instance.new("UIStroke", aiFrame)
-    stroke.Thickness = 1.6
-    stroke.Color = Color3.fromRGB(255, 170, 0)
-    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 10)
+    corner.Parent = frame
 
-    -- Icon
-    local icon = Instance.new("ImageLabel")
-    icon.Image = config.ICON_IMAGE --rbxassetid://84768391180077
-    icon.AnchorPoint = Vector2.new(0.5, 0.5)
-    icon.Position = UDim2.new(0.22, 0, 0.5, 0)
-    icon.Size = UDim2.new(0.18, 0, 0.18, 0)
-    icon.SizeConstraint = 1
-    icon.BackgroundTransparency = 1
-    icon.ImageColor3 = config.COLORS.off.icon
-    icon.ImageTransparency = 0.18
-    icon.Parent = aiFrame
-    -- Maintain aspect ratio
-    local aspect = Instance.new("UIAspectRatioConstraint")
-    aspect.AspectRatio = 1 -- 1:1 square
-    aspect.Parent = icon
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 28)
+    title.BackgroundTransparency = 1
+    title.Text = "♟️ Nuclear AI"
+    title.TextColor3 = Color3.fromRGB(255, 215, 0)
+    title.TextScaled = true
+    title.Font = Enum.Font.GothamBold
+    title.Parent = frame
 
-    -- Label
-    local label = Instance.new("TextLabel")
-    label.Text = "AI: OFF"
-    label.AnchorPoint = Vector2.new(0.5, 0.5)
-    label.Position = UDim2.new(0.65, 0, 0.5, 0)
-    label.Size = UDim2.new(0.55, 0, 0.65, 0)
-    label.FontFace = Font.new("rbxasset://fonts/families/TitilliumWeb.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
-    label.TextSize = 14
-    label.TextScaled = true
-    label.TextColor3 = config.COLORS.off.text
-    label.BackgroundTransparency = 1
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = aiFrame
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(0.88, 0, 0, 38)
+    toggleBtn.Position = UDim2.new(0.06, 0, 0, 38)
+    toggleBtn.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+    toggleBtn.Text = "AI OFF"
+    toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    toggleBtn.TextScaled = true
+    toggleBtn.Font = Enum.Font.GothamSemibold
+    toggleBtn.Parent = frame
 
-    -- Invisible clickable layer for frame
-    local clickZone = Instance.new("TextButton")
-    clickZone.BackgroundTransparency = 1
-    clickZone.Size = UDim2.new(1, 0, 1, 0)
-    clickZone.Text = ""
-    clickZone.BackgroundColor3 = config.COLORS.off.background
-    clickZone.TextColor3 = config.COLORS.off.text
-    clickZone.AutoButtonColor = false
-    clickZone.Parent = aiFrame
-    -- Apply corner radius to the TextButton
-    local cornerTextB = Instance.new("UICorner", clickZone)
-    cornerTextB.CornerRadius = UDim.new(0, 8)
+    local btnCorner = Instance.new("UICorner")
+    btnCorner.CornerRadius = UDim.new(0, 8)
+    btnCorner.Parent = toggleBtn
 
-    -- Add stroke to the TextButton
-    local strokeButton = Instance.new("UIStroke")
-    strokeButton.Thickness = 1.6
-    strokeButton.Color = Color3.fromRGB(255, 170, 0)
-    strokeButton.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    strokeButton.Parent = clickZone
+    local statusLabel = Instance.new("TextLabel")
+    statusLabel.Size = UDim2.new(1, 0, 0, 15)
+    statusLabel.Position = UDim2.new(0, 0, 1, 2)
+    statusLabel.BackgroundTransparency = 1
+    statusLabel.Text = "Status: Ready"
+    statusLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
+    statusLabel.TextScaled = true
+    statusLabel.Font = Enum.Font.Gotham
+    statusLabel.Parent = frame
 
-    -- update the frame's style when on/off
-    local function updateToggleStyle(isOn)
-        local style = isOn and config.COLORS.on or config.COLORS.off
-    
-        label.Text = isOn and "AI: ON" or "AI: OFF"
-        label.TextColor3 = style.text
-        icon.ImageColor3 = style.icon
-        aiFrame.BackgroundColor3 = style.background
+    -- Toggle Logic
+    local aiEnabled = false
+
+    local function updateUI()
+        if aiEnabled then
+            toggleBtn.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+            toggleBtn.Text = "AI ON"
+            statusLabel.Text = "Status: Active"
+        else
+            toggleBtn.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+            toggleBtn.Text = "AI OFF"
+            statusLabel.Text = "Status: Inactive"
+        end
     end
 
-    
-    clickZone.MouseButton1Down:Connect(function()
-        state.aiRunning = not state.aiRunning
-        updateToggleStyle(state.aiRunning)
+    toggleBtn.MouseButton1Click:Connect(function()
+        aiEnabled = not aiEnabled
+        state.aiRunning = aiEnabled
+        updateUI()
 
-        if state.aiRunning then
-            if not state.aiLoaded then
-                ai.start(modules)
-                state.aiLoaded = true
-            end
+        if aiEnabled then
+            print("✅ Nuclear AI → ON")
+        else
+            print("⛔ Nuclear AI → OFF")
         end
     end)
-    print("[LOG]: GUI loaded.")
+
+    updateUI()
+    print("🛠️ Simple Nuclear GUI Loaded")
 end
 
 return M
