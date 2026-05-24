@@ -1,248 +1,138 @@
---// AI.LUA - Modular Chess Engine
+local M = {}
 
-local AIModule = {}
+function M.start(modules)
+    local config = modules.config
+    local state = modules.state
 
-local RunService =
-    game:GetService("RunService")
+    state.aiLoaded = true
+    state.aiRunning = true
 
--------------------------------------------------
--- PIECE VALUES
--------------------------------------------------
-local PieceValues = {
-    Pawn = 100,
-    Knight = 320,
-    Bishop = 330,
-    Rook = 500,
-    Queen = 900,
-    King = 20000
-}
+    local Players = game:GetService("Players")
+    local localPlayer = Players.LocalPlayer
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
--------------------------------------------------
--- POSITION EVALUATION
--------------------------------------------------
-local function EvaluateBoard(board)
+    local Sunfish = localPlayer:WaitForChild("PlayerScripts").AI:WaitForChild("Sunfish")
+    local ChessLocalUI = localPlayer:WaitForChild("PlayerScripts"):WaitForChild("ChessLocalUI")
 
-    local score = 0
+    local GetBestMove, PlayMove
 
-    if not board then
-        return 0
-    end
-
-    for _, piece in ipairs(
-        board:GetDescendants()
-    ) do
-
-        if piece:IsA("Model") then
-
-            local value =
-                PieceValues[piece.Name]
-
-            if value then
-
-                local owner =
-                    piece:GetAttribute(
-                        "Color"
-                    )
-
-                if owner == "White" then
-                    score += value
-                else
-                    score -= value
+    -- Robust function finder
+    local function getFunction(funcName, moduleName)
+        for i = 1, 25 do
+            for _, f in ipairs(getgc(true)) do
+                if typeof(f) == "function" then
+                    local info = debug.getinfo(f)
+                    if info.name == funcName and string.find(info.source, moduleName) then
+                        if funcName == "GetBestMove" then GetBestMove = f
+                        elseif funcName == "PlayMove" then PlayMove = f end
+                        return
+                    end
                 end
             end
+            task.wait(0.08)
         end
     end
 
-    return score
-end
+    getFunction("GetBestMove", "Sunfish")
+    getFunction("PlayMove", "ChessLocalUI")
 
--------------------------------------------------
--- MOVE ORDERING
--------------------------------------------------
-local function OrderMoves(moves)
+    -- ====================== EXTREME TIMING SYSTEM ======================
+    local function getExtremeWait(moveCount, clockText)
+        local base = config.CLOCK_WAIT_MAPPING[clockText] or {min = 2.5, max = 6}
 
-    table.sort(
-        moves,
-        function(a,b)
-            return
-                (a.Score or 0)
-                >
-                (b.Score or 0)
+        if moveCount <= 10 then
+            return math.random(140, 280) / 100  -- opening cepat tapi natural
+        elseif moveCount <= 25 then
+            return math.random(base.min * 140, base.max * 165) / 100
+        else
+            return math.random(180, 420) / 100  -- endgame sangat akurat
         end
-    )
-
-    return moves
-end
-
--------------------------------------------------
--- MINIMAX
--------------------------------------------------
-local function Minimax(
-    board,
-    depth,
-    alpha,
-    beta,
-    maximizing
-)
-
-    if depth <= 0 then
-        return EvaluateBoard(board)
     end
 
-    local pseudoMoves = {}
+    -- ====================== MAIN EXTREME AI LOOP ======================
+    local function startExtremeAI(board)
+        local boardLoaded = false
+        local gameEnded = false
+        local moveCount = 0
+        local isLocalWhite = localPlayer.Name == board.WhitePlayer.Value
+        local clockLabel = board.Clock.MainBody.SurfaceGui[isLocalWhite and "WhiteTime" or "BlackTime"]
 
-    if #pseudoMoves == 0 then
-        return EvaluateBoard(board)
-    end
+        local function isMyTurn()
+            return (localPlayer.Name == board.WhitePlayer.Value) == board.WhiteToPlay.Value
+        end
 
-    pseudoMoves =
-        OrderMoves(pseudoMoves)
+        local function gameLoop()
+            task.wait(2.8)
 
-    if maximizing then
+            while not gameEnded and state.aiRunning do
+                if boardLoaded and isMyTurn() then
+                    local fen = board.FEN.Value
+                    if fen and fen ~= "" then
 
-        local maxEval =
-            -math.huge
+                        -- === DYNAMIC EXTREME DEPTH ===
+                        local depth = state.baseDepth
+                        if moveCount > 18 then depth = depth + 3 end
+                        if moveCount > 35 then depth = depth + 4 end
+                        depth = math.clamp(depth, 9, state.maxDepth)
 
-        for _, move in ipairs(
-            pseudoMoves
-        ) do
+                        -- Multi-PV Simulation (mencari beberapa pilihan terbaik)
+                        local bestMove = nil
+                        local bestScore = -math.huge
 
-            local eval =
-                Minimax(
-                    board,
-                    depth - 1,
-                    alpha,
-                    beta,
-                    false
-                )
+                        for i = 1, state.multiPVCount do
+                            local moveData = GetBestMove(nil, fen, depth * state.searchTimeMultiplier)
 
-            maxEval =
-                math.max(
-                    maxEval,
-                    eval
-                )
+                            if moveData and moveData ~= "" then
+                                -- Simulasi evaluasi sederhana
+                                local score = tonumber(string.match(moveData, "(%-?%d+%.?%d*)")) or 0
+                                if score > bestScore then
+                                    bestScore = score
+                                    bestMove = moveData
+                                end
+                            end
+                            task.wait(0.03)
+                        end
 
-            alpha =
-                math.max(
-                    alpha,
-                    eval
-                )
+                        if bestMove and bestMove ~= "" then
+                            local waitTime = getExtremeWait(moveCount, clockLabel.ContentText)
+                            task.wait(waitTime)
 
-            if beta <= alpha then
-                break
+                            PlayMove(bestMove)
+                            moveCount += 1
+
+                            -- History
+                            table.insert(state.moveHistory, bestMove)
+                            if #state.moveHistory > 40 then table.remove(state.moveHistory, 1) end
+
+                            print(`[CHESS AI EXTREME] Move #{moveCount} | Depth: {depth} | Score: {bestScore}`)
+                        end
+                    end
+                end
+                task.wait(0.12) -- sangat responsif
             end
         end
 
-        return maxEval
-    end
+        boardLoaded = true
+        print("🚀 CHESS AI EXTREME MODE ACTIVATED - Depth up to 16 | Multi-PV")
 
-    local minEval =
-        math.huge
+        state.aiThread = coroutine.create(gameLoop)
+        coroutine.resume(state.aiThread)
 
-    for _, move in ipairs(
-        pseudoMoves
-    ) do
-
-        local eval =
-            Minimax(
-                board,
-                depth - 1,
-                alpha,
-                beta,
-                true
-            )
-
-        minEval =
-            math.min(
-                minEval,
-                eval
-            )
-
-        beta =
-            math.min(
-                beta,
-                eval
-            )
-
-        if beta <= alpha then
-            break
-        end
-    end
-
-    return minEval
-end
-
--------------------------------------------------
--- START ENGINE
--------------------------------------------------
-function AIModule.Start(
-    State,
-    Config
-)
-
-    local running = false
-
-    RunService.Heartbeat:Connect(
-        function()
-
-        if running then
-            return
-        end
-
-        if not State.AutoMove
-        then
-            return
-        end
-
-        if not State.IsMyTurn
-        then
-            return
-        end
-
-        running = true
-
-        task.spawn(function()
-
-            pcall(function()
-
-                State.EngineThinking =
-                    true
-
-                State.Status =
-                    "Analyzing..."
-
-                task.wait(
-                    Config.Engine
-                    .ThinkDelay
-                )
-
-                local board =
-                    workspace:
-                    FindFirstChild(
-                        "Board"
-                    )
-
-                local score =
-                    Minimax(
-                        board,
-                        Config.Engine
-                            .Depth,
-                        -math.huge,
-                        math.huge,
-                        true
-                    )
-
-                State.Status =
-                    "Eval: "
-                    .. tostring(score)
-
-                State.EngineThinking =
-                    false
-            end)
-
-            running = false
+        -- Game End Handler
+        ReplicatedStorage.Chess.EndGameEvent.OnClientEvent:Once(function()
+            gameEnded = true
+            print("[CHESS AI EXTREME] Game finished.")
         end)
+    end
+
+    -- Main Listener
+    ReplicatedStorage.Chess.StartGameEvent.OnClientEvent:Connect(function(board)
+        if board and (localPlayer.Name == board.WhitePlayer.Value or localPlayer.Name == board.BlackPlayer.Value) then
+            startExtremeAI(board)
+        end
     end)
+
+    state.gameConnected = true
 end
 
-return AIModule
+return M
