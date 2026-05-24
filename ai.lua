@@ -1,93 +1,248 @@
-local M = {}
+--// AI.LUA - Modular Chess Engine
 
--- ================== HUMANIZATION 100% ==================
-local function getHumanDelay(moveCount, timeLeft, isCritical)
-    local minTime, maxTime
+local AIModule = {}
 
-    if moveCount <= 12 then          -- Opening
-        minTime, maxTime = 3.4, 8.8
-    elseif moveCount >= 48 then      -- Endgame
-        minTime, maxTime = 1.7, 5.0
-    else                             -- Middlegame
-        minTime, maxTime = 2.7, 7.5
+local RunService =
+    game:GetService("RunService")
+
+-------------------------------------------------
+-- PIECE VALUES
+-------------------------------------------------
+local PieceValues = {
+    Pawn = 100,
+    Knight = 320,
+    Bishop = 330,
+    Rook = 500,
+    Queen = 900,
+    King = 20000
+}
+
+-------------------------------------------------
+-- POSITION EVALUATION
+-------------------------------------------------
+local function EvaluateBoard(board)
+
+    local score = 0
+
+    if not board then
+        return 0
     end
 
-    if timeLeft and timeLeft < 180 then
-        minTime = minTime * 0.7
-        maxTime = maxTime * 0.85
-    end
+    for _, piece in ipairs(
+        board:GetDescendants()
+    ) do
 
-    if isCritical then
-        minTime += 2.2
-        maxTime += 4.0
-    end
+        if piece:IsA("Model") then
 
-    local delay = math.random(minTime * 100, maxTime * 100) / 100
-    delay += math.random(-70, 100) / 100
+            local value =
+                PieceValues[piece.Name]
 
-    return math.clamp(delay, 1.5, 14)
-end
+            if value then
 
-local function isCriticalPosition() 
-    return math.random() < 0.27 
-end
+                local owner =
+                    piece:GetAttribute(
+                        "Color"
+                    )
 
-local function shouldMakeSmallMistake(moveCount)
-    if moveCount <= 12 then return math.random() < 0.14 end
-    if moveCount <= 35 then return math.random() < 0.08 end
-    return math.random() < 0.035
-end
-
--- ================== MAIN AI ==================
-function M.start(modules)
-    local state = modules.state
-    if state.aiLoaded then return end
-
-    state.aiLoaded = true
-    state.aiRunning = true
-    state.moveCount = 0
-
-    local Players = game:GetService("Players")
-    local RS = game:GetService("ReplicatedStorage")
-    local localPlayer = Players.LocalPlayer
-
-    print("♟️ Chess AI Full Strength + 100% Humanization Loaded")
-
-    RS.Chess.StartGameEvent.OnClientEvent:Connect(function(gameBoard)
-        if not gameBoard then return end
-        
-        state.moveCount = 0
-        state.currentBoard = gameBoard
-
-        task.spawn(function()
-            while state.aiRunning and gameBoard.Parent do
-                task.wait(0.2)
-
-                local isWhite = localPlayer.Name == gameBoard.WhitePlayer.Value
-                local isMyTurn = (gameBoard.WhiteToPlay.Value == isWhite)
-
-                if isMyTurn then
-                    local fen = gameBoard.FEN.Value
-                    local timeLeft = 300 -- bisa di-parse dari clock nanti
-
-                    local critical = isCriticalPosition()
-
-                    if shouldMakeSmallMistake(state.moveCount) then
-                        task.wait(math.random(1.8, 4.8))
-                        -- TODO: logic blunder kecil
-                    else
-                        -- === GANTI BAGIAN INI DENGAN MOVE GENERATOR GAME ===
-                        -- Contoh sementara:
-                        task.wait(getHumanDelay(state.moveCount, timeLeft, critical))
-
-                        -- Contoh pemanggilan move (sesuaikan dengan game kalian)
-                        -- gameBoard.PlayMove:FireServer("e2", "e4", "")
-                        state.moveCount += 1
-                    end
+                if owner == "White" then
+                    score += value
+                else
+                    score -= value
                 end
             end
+        end
+    end
+
+    return score
+end
+
+-------------------------------------------------
+-- MOVE ORDERING
+-------------------------------------------------
+local function OrderMoves(moves)
+
+    table.sort(
+        moves,
+        function(a,b)
+            return
+                (a.Score or 0)
+                >
+                (b.Score or 0)
+        end
+    )
+
+    return moves
+end
+
+-------------------------------------------------
+-- MINIMAX
+-------------------------------------------------
+local function Minimax(
+    board,
+    depth,
+    alpha,
+    beta,
+    maximizing
+)
+
+    if depth <= 0 then
+        return EvaluateBoard(board)
+    end
+
+    local pseudoMoves = {}
+
+    if #pseudoMoves == 0 then
+        return EvaluateBoard(board)
+    end
+
+    pseudoMoves =
+        OrderMoves(pseudoMoves)
+
+    if maximizing then
+
+        local maxEval =
+            -math.huge
+
+        for _, move in ipairs(
+            pseudoMoves
+        ) do
+
+            local eval =
+                Minimax(
+                    board,
+                    depth - 1,
+                    alpha,
+                    beta,
+                    false
+                )
+
+            maxEval =
+                math.max(
+                    maxEval,
+                    eval
+                )
+
+            alpha =
+                math.max(
+                    alpha,
+                    eval
+                )
+
+            if beta <= alpha then
+                break
+            end
+        end
+
+        return maxEval
+    end
+
+    local minEval =
+        math.huge
+
+    for _, move in ipairs(
+        pseudoMoves
+    ) do
+
+        local eval =
+            Minimax(
+                board,
+                depth - 1,
+                alpha,
+                beta,
+                true
+            )
+
+        minEval =
+            math.min(
+                minEval,
+                eval
+            )
+
+        beta =
+            math.min(
+                beta,
+                eval
+            )
+
+        if beta <= alpha then
+            break
+        end
+    end
+
+    return minEval
+end
+
+-------------------------------------------------
+-- START ENGINE
+-------------------------------------------------
+function AIModule.Start(
+    State,
+    Config
+)
+
+    local running = false
+
+    RunService.Heartbeat:Connect(
+        function()
+
+        if running then
+            return
+        end
+
+        if not State.AutoMove
+        then
+            return
+        end
+
+        if not State.IsMyTurn
+        then
+            return
+        end
+
+        running = true
+
+        task.spawn(function()
+
+            pcall(function()
+
+                State.EngineThinking =
+                    true
+
+                State.Status =
+                    "Analyzing..."
+
+                task.wait(
+                    Config.Engine
+                    .ThinkDelay
+                )
+
+                local board =
+                    workspace:
+                    FindFirstChild(
+                        "Board"
+                    )
+
+                local score =
+                    Minimax(
+                        board,
+                        Config.Engine
+                            .Depth,
+                        -math.huge,
+                        math.huge,
+                        true
+                    )
+
+                State.Status =
+                    "Eval: "
+                    .. tostring(score)
+
+                State.EngineThinking =
+                    false
+            end)
+
+            running = false
         end)
     end)
 end
 
-return M
+return AIModule
