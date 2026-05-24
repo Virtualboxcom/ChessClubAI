@@ -1,121 +1,178 @@
-local M = {}
+--// GUI.LUA - Modern Dark Pro
 
-function M.init(modules)
-    local config = modules.config
-    local state = modules.state
-    local ai = modules.ai
+local GuiModule = {}
 
-    local aiRunning = false
+local TweenService = game:GetService("TweenService")
+local Players = game:GetService("Players")
 
-    -- Wait for GUI to be present
-    local player = game:GetService("Players").LocalPlayer
-    local playerGui = player:WaitForChild("PlayerGui")
+local player = Players.LocalPlayer
 
-    -- Wait for the existing structure
-    local mainMenu = playerGui:WaitForChild("MainMenu", 5)
-    local sideFrame = mainMenu and mainMenu:WaitForChild("SideFrame", 5)
-
-    if not sideFrame then
-        warn("SideFrame not found. Aborting UI injection.")
-        return
-    end
-    sideFrame.AnchorPoint = Vector2.new(0, 0.45)
-
-    if sideFrame:FindFirstChild("aiFrame") then
-        warn("Chess AI toggle UI already injected.")
-        return
-    end
-
-    -- Main frame
-    local aiFrame = Instance.new("Frame")
-    aiFrame.Name = "aiFrame"
-    aiFrame.Size = UDim2.new(1, 0, 0.045, 0) -- Scaled size
-    aiFrame.BackgroundColor3 = config.COLORS.off.background
-    aiFrame.LayoutOrder = 99
-    aiFrame.Parent = sideFrame
-
-    -- Corners + stroke for the frame
-    local corner = Instance.new("UICorner", aiFrame)
-    corner.CornerRadius = UDim.new(0, 8)
-
-    local stroke = Instance.new("UIStroke", aiFrame)
-    stroke.Thickness = 1.6
-    stroke.Color = Color3.fromRGB(255, 170, 0)
-    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-
-    -- Icon
-    local icon = Instance.new("ImageLabel")
-    icon.Image = config.ICON_IMAGE --rbxassetid://84768391180077
-    icon.AnchorPoint = Vector2.new(0.5, 0.5)
-    icon.Position = UDim2.new(0.22, 0, 0.5, 0)
-    icon.Size = UDim2.new(0.18, 0, 0.18, 0)
-    icon.SizeConstraint = 1
-    icon.BackgroundTransparency = 1
-    icon.ImageColor3 = config.COLORS.off.icon
-    icon.ImageTransparency = 0.18
-    icon.Parent = aiFrame
-    -- Maintain aspect ratio
-    local aspect = Instance.new("UIAspectRatioConstraint")
-    aspect.AspectRatio = 1 -- 1:1 square
-    aspect.Parent = icon
-
-    -- Label
-    local label = Instance.new("TextLabel")
-    label.Text = "AI: OFF"
-    label.AnchorPoint = Vector2.new(0.5, 0.5)
-    label.Position = UDim2.new(0.65, 0, 0.5, 0)
-    label.Size = UDim2.new(0.55, 0, 0.65, 0)
-    label.FontFace = Font.new("rbxasset://fonts/families/TitilliumWeb.json", Enum.FontWeight.Regular, Enum.FontStyle.Normal)
-    label.TextSize = 14
-    label.TextScaled = true
-    label.TextColor3 = config.COLORS.off.text
-    label.BackgroundTransparency = 1
-    label.TextXAlignment = Enum.TextXAlignment.Left
-    label.Parent = aiFrame
-
-    -- Invisible clickable layer for frame
-    local clickZone = Instance.new("TextButton")
-    clickZone.BackgroundTransparency = 1
-    clickZone.Size = UDim2.new(1, 0, 1, 0)
-    clickZone.Text = ""
-    clickZone.BackgroundColor3 = config.COLORS.off.background
-    clickZone.TextColor3 = config.COLORS.off.text
-    clickZone.AutoButtonColor = false
-    clickZone.Parent = aiFrame
-    -- Apply corner radius to the TextButton
-    local cornerTextB = Instance.new("UICorner", clickZone)
-    cornerTextB.CornerRadius = UDim.new(0, 8)
-
-    -- Add stroke to the TextButton
-    local strokeButton = Instance.new("UIStroke")
-    strokeButton.Thickness = 1.6
-    strokeButton.Color = Color3.fromRGB(255, 170, 0)
-    strokeButton.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
-    strokeButton.Parent = clickZone
-
-    -- update the frame's style when on/off
-    local function updateToggleStyle(isOn)
-        local style = isOn and config.COLORS.on or config.COLORS.off
-    
-        label.Text = isOn and "AI: ON" or "AI: OFF"
-        label.TextColor3 = style.text
-        icon.ImageColor3 = style.icon
-        aiFrame.BackgroundColor3 = style.background
-    end
-
-    
-    clickZone.MouseButton1Down:Connect(function()
-        state.aiRunning = not state.aiRunning
-        updateToggleStyle(state.aiRunning)
-
-        if state.aiRunning then
-            if not state.aiLoaded then
-                ai.start(modules)
-                state.aiLoaded = true
-            end
-        end
-    end)
-    print("[LOG]: GUI loaded.")
+local function CreateCorner(parent, radius)
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, radius)
+    c.Parent = parent
 end
 
-return M
+function GuiModule.Create(State, Config)
+
+    if Config.UI.SafeReExecute then
+        local old =
+            game:GetService("CoreGui"):FindFirstChild("ChessClubModern")
+
+        if old then
+            old:Destroy()
+        end
+    end
+
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "ChessClubModern"
+    gui.ResetOnSpawn = false
+    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    pcall(function()
+        gui.Parent = game:GetService("CoreGui")
+    end)
+
+    if not gui.Parent then
+        gui.Parent = player.PlayerGui
+    end
+
+    local Main = Instance.new("Frame")
+    Main.Size = UDim2.new(
+        0,
+        Config.UI.Size.Width,
+        0,
+        Config.UI.Size.Height
+    )
+    Main.Position = Config.UI.Position
+    Main.BackgroundColor3 =
+        Config.UI.Theme.Background
+    Main.BorderSizePixel = 0
+    Main.Active = true
+    Main.Draggable = Config.UI.Draggable
+    Main.Parent = gui
+
+    CreateCorner(Main, 12)
+
+    -------------------------------------------------
+    -- HEADER
+    -------------------------------------------------
+    local Header = Instance.new("Frame")
+    Header.Size = UDim2.new(1,0,0,45)
+    Header.BackgroundColor3 =
+        Config.UI.Theme.Header
+    Header.BorderSizePixel = 0
+    Header.Parent = Main
+
+    CreateCorner(Header,12)
+
+    local Title = Instance.new("TextLabel")
+    Title.BackgroundTransparency = 1
+    Title.Size = UDim2.new(1,-20,1,0)
+    Title.Position = UDim2.new(0,15,0,0)
+    Title.Text = "♟ CHESS CLUB AI"
+    Title.Font = Enum.Font.GothamBold
+    Title.TextColor3 =
+        Config.UI.Theme.Text
+    Title.TextSize = 16
+    Title.TextXAlignment =
+        Enum.TextXAlignment.Left
+    Title.Parent = Header
+
+    -------------------------------------------------
+    -- STATUS
+    -------------------------------------------------
+    local Status = Instance.new("TextLabel")
+    Status.Size = UDim2.new(1,-20,0,28)
+    Status.Position = UDim2.new(0,10,0,60)
+    Status.BackgroundTransparency = 1
+    Status.TextColor3 =
+        Config.UI.Theme.Text
+    Status.TextXAlignment =
+        Enum.TextXAlignment.Left
+    Status.Font = Enum.Font.Gotham
+    Status.TextSize = 14
+    Status.Text = "Status: Loading"
+    Status.Parent = Main
+
+    -------------------------------------------------
+    -- ENGINE
+    -------------------------------------------------
+    local Engine = Instance.new("TextLabel")
+    Engine.Size = UDim2.new(1,-20,0,24)
+    Engine.Position = UDim2.new(0,10,0,95)
+    Engine.BackgroundTransparency = 1
+    Engine.Text =
+        "Engine Depth: "..Config.Engine.Depth
+    Engine.TextColor3 =
+        Config.UI.Theme.Warning
+    Engine.TextSize = 13
+    Engine.Font = Enum.Font.GothamMedium
+    Engine.TextXAlignment =
+        Enum.TextXAlignment.Left
+    Engine.Parent = Main
+
+    -------------------------------------------------
+    -- BUTTON
+    -------------------------------------------------
+    local Toggle = Instance.new("TextButton")
+    Toggle.Size = UDim2.new(1,-20,0,42)
+    Toggle.Position = UDim2.new(0,10,0,135)
+    Toggle.BackgroundColor3 =
+        Config.UI.Theme.Accent
+    Toggle.TextColor3 =
+        Config.UI.Theme.Text
+    Toggle.Text = "AUTO MOVE : OFF"
+    Toggle.Font = Enum.Font.GothamBold
+    Toggle.TextSize = 14
+    Toggle.Parent = Main
+
+    CreateCorner(Toggle,8)
+
+    Toggle.MouseButton1Click:Connect(function()
+
+        State.AutoMove =
+            not State.AutoMove
+
+        Toggle.Text =
+            State.AutoMove
+            and "AUTO MOVE : ON"
+            or "AUTO MOVE : OFF"
+
+    end)
+
+    -------------------------------------------------
+    -- DEBUG PANEL
+    -------------------------------------------------
+    local Debug = Instance.new("TextLabel")
+    Debug.Size = UDim2.new(1,-20,0,25)
+    Debug.Position = UDim2.new(0,10,1,-35)
+    Debug.BackgroundTransparency = 1
+    Debug.TextColor3 =
+        Config.UI.Theme.SubText
+    Debug.Text =
+        "Debug: Ready"
+    Debug.Font = Enum.Font.Gotham
+    Debug.TextSize = 11
+    Debug.TextXAlignment =
+        Enum.TextXAlignment.Left
+    Debug.Parent = Main
+
+    -------------------------------------------------
+    -- UPDATE LOOP
+    -------------------------------------------------
+    task.spawn(function()
+        while gui.Parent do
+            task.wait(Config.UI.RefreshRate)
+
+            Status.Text =
+                "Status: "..State.Status
+
+            Debug.Text =
+                "Turn: "..
+                tostring(State.IsMyTurn)
+        end
+    end)
+end
+
+return GuiModule
