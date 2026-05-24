@@ -16,119 +16,131 @@ function M.start(modules)
 
     local GetBestMove, PlayMove
 
-    -- Robust function finder
+    -- Ultra robust function finder
     local function getFunction(funcName, moduleName)
-        for i = 1, 25 do
+        for i = 1, 30 do
             for _, f in ipairs(getgc(true)) do
                 if typeof(f) == "function" then
                     local info = debug.getinfo(f)
-                    if info.name == funcName and string.find(info.source, moduleName) then
-                        if funcName == "GetBestMove" then GetBestMove = f
-                        elseif funcName == "PlayMove" then PlayMove = f end
-                        return
+                    if info.name == funcName and string.find(info.source, moduleName, 1, true) then
+                        if funcName == "GetBestMove" then 
+                            GetBestMove = f 
+                        elseif funcName == "PlayMove" then 
+                            PlayMove = f 
+                        end
+                        return true
                     end
                 end
             end
-            task.wait(0.08)
+            task.wait(0.1)
         end
+        return false
     end
 
     getFunction("GetBestMove", "Sunfish")
     getFunction("PlayMove", "ChessLocalUI")
 
-    -- ====================== EXTREME TIMING SYSTEM ======================
-    local function getExtremeWait(moveCount, clockText)
-        local base = config.CLOCK_WAIT_MAPPING[clockText] or {min = 2.5, max = 6}
+    -- ====================== NUCLEAR TIMING ======================
+    local function getNuclearWait(moveCount, clockText)
+        local base = config.CLOCK_WAIT_MAPPING[clockText] or {min = 3, max = 8}
 
-        if moveCount <= 10 then
-            return math.random(140, 280) / 100  -- opening cepat tapi natural
-        elseif moveCount <= 25 then
-            return math.random(base.min * 140, base.max * 165) / 100
+        if moveCount <= 12 then
+            return math.random(135, 265) / 100
+        elseif moveCount <= 30 then
+            return math.random(base.min * 155, base.max * 195) / 100
         else
-            return math.random(180, 420) / 100  -- endgame sangat akurat
+            return math.random(220, 520) / 100   -- endgame sangat teliti
         end
     end
 
-    -- ====================== MAIN EXTREME AI LOOP ======================
-    local function startExtremeAI(board)
+    -- ====================== NUCLEAR AI CORE ======================
+    local function startNuclearAI(board)
         local boardLoaded = false
         local gameEnded = false
         local moveCount = 0
         local isLocalWhite = localPlayer.Name == board.WhitePlayer.Value
-        local clockLabel = board.Clock.MainBody.SurfaceGui[isLocalWhite and "WhiteTime" or "BlackTime"]
+        local clockLabel = board:FindFirstChild("Clock", true):FindFirstChild("WhiteTime") or board:FindFirstChild("Clock", true):FindFirstChild("BlackTime")
 
         local function isMyTurn()
             return (localPlayer.Name == board.WhitePlayer.Value) == board.WhiteToPlay.Value
         end
 
+        local function evaluateBestMove(fen, depth)
+            local bestMove = nil
+            local bestScore = -math.huge
+
+            for i = 1, state.multiPVCount do
+                local result = GetBestMove(nil, fen, depth * state.searchTimeMultiplier)
+                
+                if result and result ~= "" then
+                    local score = tonumber(string.match(result, "(%-?%d+%.?%d*)")) or 0
+                    
+                    -- Contempt factor (kurangi suka remis)
+                    if score > 0 then score = score + state.contemptFactor end
+                    if score < 0 then score = score - state.contemptFactor end
+
+                    if score > bestScore then
+                        bestScore = score
+                        bestMove = result
+                    end
+                end
+                task.wait(0.025)
+            end
+            return bestMove, bestScore
+        end
+
         local function gameLoop()
-            task.wait(2.8)
+            task.wait(2.5)
 
             while not gameEnded and state.aiRunning do
                 if boardLoaded and isMyTurn() then
                     local fen = board.FEN.Value
                     if fen and fen ~= "" then
 
-                        -- === DYNAMIC EXTREME DEPTH ===
+                        -- Dynamic Nuclear Depth
                         local depth = state.baseDepth
-                        if moveCount > 18 then depth = depth + 3 end
-                        if moveCount > 35 then depth = depth + 4 end
-                        depth = math.clamp(depth, 9, state.maxDepth)
+                        if moveCount >= 15 then depth += 3 end
+                        if moveCount >= 32 then depth += 4 end
+                        if moveCount >= 50 then depth += 2 end
+                        depth = math.clamp(depth, 11, state.maxDepth)
 
-                        -- Multi-PV Simulation (mencari beberapa pilihan terbaik)
-                        local bestMove = nil
-                        local bestScore = -math.huge
-
-                        for i = 1, state.multiPVCount do
-                            local moveData = GetBestMove(nil, fen, depth * state.searchTimeMultiplier)
-
-                            if moveData and moveData ~= "" then
-                                -- Simulasi evaluasi sederhana
-                                local score = tonumber(string.match(moveData, "(%-?%d+%.?%d*)")) or 0
-                                if score > bestScore then
-                                    bestScore = score
-                                    bestMove = moveData
-                                end
-                            end
-                            task.wait(0.03)
-                        end
+                        local bestMove, score = evaluateBestMove(fen, depth)
 
                         if bestMove and bestMove ~= "" then
-                            local waitTime = getExtremeWait(moveCount, clockLabel.ContentText)
+                            local waitTime = getNuclearWait(moveCount, clockLabel.ContentText)
                             task.wait(waitTime)
 
                             PlayMove(bestMove)
                             moveCount += 1
 
-                            -- History
+                            -- Update history & transposition
                             table.insert(state.moveHistory, bestMove)
-                            if #state.moveHistory > 40 then table.remove(state.moveHistory, 1) end
+                            if #state.moveHistory > 50 then table.remove(state.moveHistory, 1) end
 
-                            print(`[CHESS AI EXTREME] Move #{moveCount} | Depth: {depth} | Score: {bestScore}`)
+                            print(`[CHESS AI NUCLEAR] Move #{moveCount} | Depth: {depth} | Score: {score}`)
                         end
                     end
                 end
-                task.wait(0.12) -- sangat responsif
+                task.wait(0.08) -- super responsif
             end
         end
 
         boardLoaded = true
-        print("🚀 CHESS AI EXTREME MODE ACTIVATED - Depth up to 16 | Multi-PV")
+        print("☢️ CHESS AI NUCLEAR MODE ACTIVATED - Depth up to 20 | 5-PV")
 
         state.aiThread = coroutine.create(gameLoop)
         coroutine.resume(state.aiThread)
 
-        -- Game End Handler
         ReplicatedStorage.Chess.EndGameEvent.OnClientEvent:Once(function()
             gameEnded = true
-            print("[CHESS AI EXTREME] Game finished.")
+            print("[CHESS AI NUCLEAR] Game selesai.")
         end)
     end
 
-    -- Main Listener
+    -- Main Connection
     ReplicatedStorage.Chess.StartGameEvent.OnClientEvent:Connect(function(board)
         if board and (localPlayer.Name == board.WhitePlayer.Value or localPlayer.Name == board.BlackPlayer.Value) then
-            startExtremeAI(board)
+            startNuclearAI(board)
         end
     end)
 
